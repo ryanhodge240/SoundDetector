@@ -1,5 +1,5 @@
 name: Sound Detector
-version: "0.1.1"
+version: "0.1.2"
 slug: sound_detector
 description: Detect common household sounds and optionally send events over Tailscale.
 arch:
@@ -9,6 +9,8 @@ boot: auto
 init: false
 audio: true
 host_network: true
+devices:
+    - /dev/snd
 options:
     server_url: ""
     server_token: ""
