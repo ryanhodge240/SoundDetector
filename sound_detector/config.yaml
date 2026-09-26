@@ -1,0 +1,25 @@
+name: Sound Detector
+version: "0.1.1"
+slug: sound_detector
+description: Detect common household sounds and optionally send events over Tailscale.
+arch:
+    - aarch64
+startup: application
+boot: auto
+init: false
+audio: true
+host_network: true
+options:
+    server_url: ""
+    server_token: ""
+    confidence_threshold: 0.65
+    cooldown_seconds: 10
+    dry_run: true
+    audio_input_device: ""
+schema:
+    server_url: str?
+    server_token: password?
+    confidence_threshold: float(0,1)
+    cooldown_seconds: int(0,)
+    dry_run: bool
+    audio_input_device: str?
