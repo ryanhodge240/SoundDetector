@@ -33,6 +33,7 @@ The app currently supports `aarch64`, which is the architecture used by a
 - `dry_run`: Log detections without sending them, even if `server_url` is set.
 - `audio_input_device`: Optional PortAudio device name or index. Leave empty to
   use the default USB microphone.
+- `log_level`: Set to `debug` to log model scores for every analyzed window.
 
 The server URL should use the server's Tailscale IP or MagicDNS hostname, for
 example `http://100.100.100.100:3001/api/audio/events`. Tailscale must already
@@ -49,3 +50,7 @@ not the USB microphone, set `audio_input_device` to the displayed device name.
 
 The model is intentionally downloaded at runtime rather than bundled into the
 repository because it is much larger than the app source.
+
+The detector analyzes overlapping windows. At `debug` level, logs include the
+RMS level, model scores for the target sounds, inference duration, and audio
+input overflow warnings.

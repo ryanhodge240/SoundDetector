@@ -21,6 +21,7 @@ MODEL_URL = 'https://huggingface.co/thelou1s/yamnet/resolve/main/lite-model_yamn
 LABELS_URL = 'https://raw.githubusercontent.com/tensorflow/models/master/research/audioset/yamnet/yamnet_class_map.csv'
 SAMPLE_RATE = 16000
 WINDOW_SAMPLES = 15600
+HOP_SAMPLES = WINDOW_SAMPLES // 2
 MODEL_FILENAME = 'yamnet.tflite'
 LABELS_FILENAME = 'yamnet_labels.csv'
 
@@ -93,6 +94,7 @@ def send_event(server_url: str, server_token: str, payload: dict[str, Any]) -> N
         with urllib.request.urlopen(request, timeout=10) as response:
             if response.status < 200 or response.status >= 300:
                 raise RuntimeError(f'server returned HTTP {response.status}')
+            logging.info('Sent %s event to the Beacon server', payload['event'])
     except urllib.error.URLError as error:
         logging.warning('Unable to send sound event: %s', error)
 
@@ -143,40 +145,84 @@ def run(config: dict[str, Any]) -> None:
     server_token = str(config.get('server_token') or '').strip()
     dry_run = bool(config.get('dry_run', True))
     device = normalize_device(config.get('audio_input_device'))
+    log_level = str(config.get('log_level') or 'info').upper()
+    logging.getLogger().setLevel(getattr(logging, log_level, logging.INFO))
     last_events: dict[str, float] = {}
+
+    logging.info(
+        'Configuration: sample_rate=%s window_ms=%.0f hop_ms=%.0f threshold=%.2f cooldown_seconds=%s '
+        'dry_run=%s server_configured=%s',
+        SAMPLE_RATE,
+        WINDOW_SAMPLES / SAMPLE_RATE * 1000,
+        HOP_SAMPLES / SAMPLE_RATE * 1000,
+        threshold,
+        cooldown_seconds,
+        dry_run,
+        bool(server_url),
+    )
 
     logging.info('Available audio devices:')
     for index, device_info in enumerate(sd.query_devices()):
         if device_info['max_input_channels'] > 0:
             logging.info('  %s: %s', index, device_info['name'])
 
-    logging.info('Starting microphone capture at %s Hz', SAMPLE_RATE)
+    logging.info('Starting microphone capture at %s Hz with 50%% overlapping windows', SAMPLE_RATE)
+    audio_buffer = np.empty(0, dtype=np.float32)
+    window_count = 0
+    next_summary = time.monotonic() + 10
     with sd.InputStream(
         samplerate=SAMPLE_RATE,
         channels=1,
         dtype='float32',
-        blocksize=WINDOW_SAMPLES,
+        blocksize=HOP_SAMPLES,
         device=device,
     ) as stream:
         while True:
-            audio, _ = stream.read(WINDOW_SAMPLES)
-            samples = np.asarray(audio[:, 0], dtype=np.float32)
-            rms = math.sqrt(float(np.mean(np.square(samples))))
-            if rms < 0.005:
-                continue
+            audio, status = stream.read(HOP_SAMPLES)
+            if status:
+                logging.warning('Audio input status: %s', status)
 
-            for event_name, confidence in classify_window(interpreter, labels, samples):
-                if confidence < threshold:
-                    continue
-                now = time.monotonic()
-                if now - last_events.get(event_name, 0) < cooldown_seconds:
+            audio_buffer = np.concatenate((audio_buffer, np.asarray(audio[:, 0], dtype=np.float32)))
+            while len(audio_buffer) >= WINDOW_SAMPLES:
+                samples = audio_buffer[:WINDOW_SAMPLES]
+                audio_buffer = audio_buffer[HOP_SAMPLES:]
+                window_count += 1
+                rms = math.sqrt(float(np.mean(np.square(samples))))
+                if rms < 0.005:
+                    logging.debug('Window %s skipped: rms=%.5f below gate', window_count, rms)
                     continue
 
-                last_events[event_name] = now
-                payload = event_payload(event_name, confidence)
-                logging.info('Detected %s (confidence %.2f)', event_name, confidence)
-                if server_url and not dry_run:
-                    send_event(server_url, server_token, payload)
+                inference_started = time.monotonic()
+                scores = classify_window(interpreter, labels, samples)
+                inference_ms = (time.monotonic() - inference_started) * 1000
+                score_by_event: dict[str, float] = {}
+                for event_name, confidence in scores:
+                    score_by_event[event_name] = max(score_by_event.get(event_name, 0), confidence)
+                logging.debug(
+                    'Window %s: rms=%.5f inference_ms=%.1f scores=%s',
+                    window_count,
+                    rms,
+                    inference_ms,
+                    ', '.join(f'{name}={score:.3f}' for name, score in score_by_event.items()),
+                )
+
+                for event_name, confidence in score_by_event.items():
+                    if confidence < threshold:
+                        continue
+                    now = time.monotonic()
+                    if now - last_events.get(event_name, 0) < cooldown_seconds:
+                        logging.debug('Suppressed %s: cooldown is active', event_name)
+                        continue
+
+                    last_events[event_name] = now
+                    payload = event_payload(event_name, confidence)
+                    logging.info('Detected %s (confidence %.2f, rms %.5f)', event_name, confidence, rms)
+                    if server_url and not dry_run:
+                        send_event(server_url, server_token, payload)
+
+            if time.monotonic() >= next_summary:
+                logging.info('Audio summary: analyzed_windows=%s buffered_samples=%s', window_count, len(audio_buffer))
+                next_summary = time.monotonic() + 10
 
 
 def main() -> None:
