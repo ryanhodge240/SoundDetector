@@ -94,6 +94,7 @@ def send_event(server_url: str, server_token: str, payload: dict[str, Any]) -> N
         data=json.dumps(payload).encode('utf-8'),
         headers={
             'Content-Type': 'application/json',
+            'User-Agent': 'OwlHacks-SoundDetector/0.1.8',
             **({'Authorization': f'Bearer {server_token}'} if server_token else {}),
         },
         method='POST',
