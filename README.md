@@ -78,6 +78,8 @@ Configuration options include:
 - `confidence_threshold`: minimum model confidence.
 - `confirm_frames`: detections required before reporting arrival.
 - `clear_frames`: missed detections required before reporting departure.
+- `save_debug_frame`: optionally save the first captured frame as
+  `/data/debug_frame.jpg` for camera troubleshooting.
 
 The app reports an initial `cleared` state for both object types, then reports
 only subsequent state changes. Example event:
@@ -91,3 +93,9 @@ only subsequent state changes. Example event:
   "timestamp": 1720000000000
 }
 ```
+
+For troubleshooting, set `log_level` to `debug`. The logs then include camera
+frame statistics, model input/output tensor details, the top raw class IDs and
+scores, filtered detections, and inference timing. The optional debug frame is
+stored locally in the app's persistent `/data` directory and is never sent to
+the server.

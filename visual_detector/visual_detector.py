@@ -107,7 +107,9 @@ def tensor_input(interpreter: Interpreter, frame: np.ndarray) -> None:
     interpreter.set_tensor(details["index"], np.expand_dims(image.astype(details["dtype"]), axis=0))
 
 
-def detection_outputs(interpreter: Interpreter) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def detection_outputs(
+    interpreter: Interpreter,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, float]]]:
     vectors: list[np.ndarray] = []
     boxes: np.ndarray | None = None
     for details in interpreter.get_output_details():
@@ -133,13 +135,25 @@ def detection_outputs(interpreter: Interpreter) -> tuple[np.ndarray, np.ndarray,
     class_candidates = [vector for vector in vectors if vector is not scores]
     classes = min(class_candidates, key=lambda vector: float(np.mean(np.abs(vector - np.round(vector)))))
     count = min(len(boxes), len(classes), len(scores))
-    return boxes[:count], classes[:count], scores[:count]
+    raw_detections = sorted(
+        (
+            int(round(float(class_id))),
+            float(score),
+        )
+        for class_id, score in zip(classes[:count], scores[:count])
+    )
+    raw_detections = sorted(raw_detections, key=lambda item: item[1], reverse=True)[:10]
+    return boxes[:count], classes[:count], scores[:count], raw_detections
 
 
-def detect(interpreter: Interpreter, frame: np.ndarray, threshold: float) -> dict[str, float]:
+def detect(
+    interpreter: Interpreter,
+    frame: np.ndarray,
+    threshold: float,
+) -> tuple[dict[str, float], list[tuple[int, float]]]:
     tensor_input(interpreter, frame)
     interpreter.invoke()
-    _, classes, scores = detection_outputs(interpreter)
+    _, classes, scores, raw_detections = detection_outputs(interpreter)
     detected: dict[str, float] = {}
     for class_id, score in zip(classes, scores):
         if score < threshold:
@@ -149,7 +163,19 @@ def detect(interpreter: Interpreter, frame: np.ndarray, threshold: float) -> dic
             detected["person"] = max(detected.get("person", 0.0), float(score))
         elif class_id in VEHICLE_CLASSES:
             detected["vehicle"] = max(detected.get("vehicle", 0.0), float(score))
-    return detected
+    return detected, raw_detections
+
+
+def log_model_outputs(interpreter: Interpreter) -> None:
+    for details in interpreter.get_output_details():
+        logging.debug(
+            "Model output: index=%s name=%s shape=%s dtype=%s quantization=%s",
+            details["index"],
+            details.get("name"),
+            details["shape"],
+            details["dtype"].__name__,
+            details.get("quantization"),
+        )
 
 
 def report_state(
@@ -181,18 +207,26 @@ def run(config: dict[str, Any]) -> None:
     server_url = str(config.get("server_url") or "").strip()
     server_token = str(config.get("server_token") or "").strip()
     dry_run = bool(config.get("dry_run", True))
+    save_debug_frame = bool(config.get("save_debug_frame", False))
     version = os.environ.get("VISUAL_DETECTOR_VERSION") or "unknown"
 
     interpreter = Interpreter(model_path=str(model_path), num_threads=1)
     interpreter.allocate_tensors()
-    input_shape = interpreter.get_input_details()[0]["shape"]
+    input_details = interpreter.get_input_details()[0]
+    input_shape = input_details["shape"]
+    log_model_outputs(interpreter)
     logging.info(
         "Visual Detector version=%s camera=%s requested_resolution=%sx%s "
         "model_input=%sx%s interval_seconds=%s threshold=%.2f dry_run=%s "
-        "server_configured=%s",
+        "server_configured=%s save_debug_frame=%s",
         version, camera_device, camera_width, camera_height,
         input_shape[2], input_shape[1], detection_interval, threshold,
-        dry_run, bool(server_url),
+        dry_run, bool(server_url), save_debug_frame,
+    )
+    logging.debug(
+        "Model input: index=%s name=%s shape=%s dtype=%s quantization=%s",
+        input_details["index"], input_details.get("name"), input_details["shape"],
+        input_details["dtype"].__name__, input_details.get("quantization"),
     )
 
     camera = cv2.VideoCapture(camera_device)
@@ -218,6 +252,7 @@ def run(config: dict[str, Any]) -> None:
     next_detection = 0.0
     inference_count = 0
     total_inference_seconds = 0.0
+    debug_frame_saved = False
     try:
         while True:
             now = time.monotonic()
@@ -231,14 +266,35 @@ def run(config: dict[str, Any]) -> None:
                 time.sleep(1)
                 continue
 
+            if save_debug_frame and not debug_frame_saved:
+                debug_path = "/data/debug_frame.jpg"
+                if cv2.imwrite(debug_path, frame):
+                    logging.info("Saved debug camera frame to %s", debug_path)
+                    debug_frame_saved = True
+                else:
+                    logging.warning("Unable to save debug camera frame to %s", debug_path)
+
+            logging.debug(
+                "Frame %s: shape=%s dtype=%s min=%.1f max=%.1f mean=%.1f",
+                inference_count + 1,
+                frame.shape,
+                frame.dtype,
+                float(np.min(frame)),
+                float(np.max(frame)),
+                float(np.mean(frame)),
+            )
+
             started = time.monotonic()
-            detected = detect(interpreter, frame, threshold)
+            detected, raw_detections = detect(interpreter, frame, threshold)
             inference_seconds = time.monotonic() - started
             inference_count += 1
             total_inference_seconds += inference_seconds
             logging.debug(
-                "Frame %s inference_ms=%.1f detections=%s",
-                inference_count, inference_seconds * 1000, detected,
+                "Frame %s inference_ms=%.1f raw_top=%s filtered=%s",
+                inference_count,
+                inference_seconds * 1000,
+                raw_detections,
+                detected,
             )
 
             for object_name in objects:

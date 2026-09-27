@@ -1,5 +1,5 @@
 name: Visual Detector
-version: "0.1.0"
+version: "0.1.1"
 slug: visual_detector
 description: Detect people and vehicles from a USB webcam and optionally send state changes over Tailscale.
 arch:
@@ -19,6 +19,7 @@ options:
     server_url: ""
     server_token: ""
     dry_run: true
+    save_debug_frame: false
     log_level: info
 schema:
     camera_device: str
@@ -31,4 +32,5 @@ schema:
     server_url: str?
     server_token: password?
     dry_run: bool
+    save_debug_frame: bool
     log_level: list(debug|info|warning|error)
