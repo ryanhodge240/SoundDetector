@@ -80,6 +80,12 @@ Configuration options include:
 - `clear_frames`: missed detections required before reporting departure.
 - `save_debug_frame`: optionally save the first captured frame as
   `/data/debug_frame.jpg` for camera troubleshooting.
+- `save_annotated_frames`: save annotated frames in the Home Assistant Media
+  directory.
+- `annotated_frame_interval`: save one annotated frame after this many
+  inferences.
+- `annotated_frame_threshold`: minimum confidence shown on annotated frames.
+- `max_annotated_frames`: maximum number of annotated images retained.
 
 The app reports an initial `cleared` state for the person detector, then reports
 only subsequent state changes. Example event:
@@ -99,3 +105,8 @@ frame statistics, model input/output tensor details, the top raw class IDs and
 scores, filtered detections, and inference timing. The optional debug frame is
 stored locally in the app's persistent `/data` directory and is never sent to
 the server.
+
+Annotated images are written to `/media/visual_detector/` and are available in
+Home Assistant's Media browser. They include every model detection above the
+visualization threshold, including detections that are not people, so they can
+be used to diagnose incorrect class predictions.

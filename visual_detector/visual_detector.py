@@ -22,6 +22,21 @@ MODEL_URL = (
 )
 MODEL_FILENAME = "ssd_mobilenet_v1.tflite"
 PERSON_CLASS = 1
+COCO_LABELS = [
+    "background", "person", "bicycle", "car", "motorcycle", "airplane",
+    "bus", "train", "truck", "boat", "traffic light", "fire hydrant",
+    "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse",
+    "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
+    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis",
+    "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+    "skateboard", "surfboard", "tennis racket", "bottle", "wine glass",
+    "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza",
+    "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table",
+    "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
+    "microwave", "oven", " toaster", "sink", "refrigerator", "book", "clock",
+    "vase", "scissors", "teddy bear", "hair drier", "toothbrush",
+]
 
 
 def read_config(path: str) -> dict[str, Any]:
@@ -163,10 +178,10 @@ def detect(
     interpreter: Interpreter,
     frame: np.ndarray,
     threshold: float,
-) -> tuple[dict[str, float], list[tuple[int, float]]]:
+) -> tuple[dict[str, float], list[tuple[int, float]], np.ndarray, np.ndarray, np.ndarray]:
     tensor_input(interpreter, frame)
     interpreter.invoke()
-    _, classes, scores, raw_detections = detection_outputs(interpreter)
+    boxes, classes, scores, raw_detections = detection_outputs(interpreter)
     detected: dict[str, float] = {}
     for class_id, score in zip(classes, scores):
         if score < threshold:
@@ -174,7 +189,74 @@ def detect(
         class_id = int(round(float(class_id)))
         if class_id == PERSON_CLASS:
             detected["person"] = max(detected.get("person", 0.0), float(score))
-    return detected, raw_detections
+    return detected, raw_detections, boxes, classes, scores
+
+
+def annotate_frame(
+    frame: np.ndarray,
+    boxes: np.ndarray,
+    classes: np.ndarray,
+    scores: np.ndarray,
+    threshold: float,
+) -> tuple[np.ndarray, list[str]]:
+    height, width = frame.shape[:2]
+    labels: list[str] = []
+    for box, class_id, score in zip(boxes, classes, scores):
+        score = float(score)
+        if score < threshold:
+            continue
+        class_number = int(round(float(class_id)))
+        label = (
+            COCO_LABELS[class_number]
+            if 0 <= class_number < len(COCO_LABELS)
+            else f"class_{class_number}"
+        )
+        y_min, x_min, y_max, x_max = [float(value) for value in box]
+        left = max(0, min(width - 1, int(x_min * width)))
+        top = max(0, min(height - 1, int(y_min * height)))
+        right = max(left, min(width - 1, int(x_max * width)))
+        bottom = max(top, min(height - 1, int(y_max * height)))
+        color = (0, 255, 0) if class_number == PERSON_CLASS else (0, 165, 255)
+        text = f"{label} {score:.2f} (id={class_number})"
+        cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+        text_top = max(18, top - 6)
+        cv2.putText(
+            frame,
+            text,
+            (left, text_top),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+        labels.append(text)
+    return frame, labels
+
+
+def save_annotated_frame(
+    frame: np.ndarray,
+    boxes: np.ndarray,
+    classes: np.ndarray,
+    scores: np.ndarray,
+    threshold: float,
+    output_directory: Path,
+    max_frames: int,
+    frame_number: int,
+) -> None:
+    output_directory.mkdir(parents=True, exist_ok=True)
+    annotated, labels = annotate_frame(frame.copy(), boxes, classes, scores, threshold)
+    filename = output_directory / f"frame_{frame_number:06d}_{int(time.time())}.jpg"
+    if not cv2.imwrite(str(filename), annotated, [cv2.IMWRITE_JPEG_QUALITY, 85]):
+        logging.warning("Unable to save annotated frame to %s", filename)
+        return
+    logging.info("Saved annotated frame to %s detections=%s", filename, labels or "none")
+    saved_frames = sorted(output_directory.glob("frame_*.jpg"), key=lambda path: path.stat().st_mtime)
+    for old_frame in saved_frames[:-max_frames]:
+        try:
+            old_frame.unlink()
+        except OSError as error:
+            logging.warning("Unable to remove old annotated frame %s: %s", old_frame, error)
 
 
 def log_model_outputs(interpreter: Interpreter) -> None:
@@ -219,6 +301,10 @@ def run(config: dict[str, Any]) -> None:
     server_token = str(config.get("server_token") or "").strip()
     dry_run = bool(config.get("dry_run", True))
     save_debug_frame = bool(config.get("save_debug_frame", False))
+    save_annotated_frames = bool(config.get("save_annotated_frames", True))
+    annotated_frame_interval = int(config.get("annotated_frame_interval", 5))
+    annotated_frame_threshold = float(config.get("annotated_frame_threshold", 0.20))
+    max_annotated_frames = int(config.get("max_annotated_frames", 100))
     version = os.environ.get("VISUAL_DETECTOR_VERSION") or "unknown"
 
     interpreter = Interpreter(model_path=str(model_path), num_threads=1)
@@ -229,10 +315,12 @@ def run(config: dict[str, Any]) -> None:
     logging.info(
         "Visual Detector version=%s camera=%s requested_resolution=%sx%s "
         "model_input=%sx%s interval_seconds=%s threshold=%.2f dry_run=%s "
-        "server_configured=%s save_debug_frame=%s",
+        "server_configured=%s save_debug_frame=%s annotated_frames=%s "
+        "annotated_interval=%s annotated_threshold=%.2f max_annotated_frames=%s",
         version, camera_device, camera_width, camera_height,
         input_shape[2], input_shape[1], detection_interval, threshold,
-        dry_run, bool(server_url), save_debug_frame,
+        dry_run, bool(server_url), save_debug_frame, save_annotated_frames,
+        annotated_frame_interval, annotated_frame_threshold, max_annotated_frames,
     )
     logging.debug(
         "Model input: index=%s name=%s shape=%s dtype=%s quantization=%s",
@@ -264,6 +352,7 @@ def run(config: dict[str, Any]) -> None:
     inference_count = 0
     total_inference_seconds = 0.0
     debug_frame_saved = False
+    annotated_directory = Path("/media/visual_detector")
     try:
         while True:
             now = time.monotonic()
@@ -296,7 +385,7 @@ def run(config: dict[str, Any]) -> None:
             )
 
             started = time.monotonic()
-            detected, raw_detections = detect(interpreter, frame, threshold)
+            detected, raw_detections, boxes, classes, scores = detect(interpreter, frame, threshold)
             inference_seconds = time.monotonic() - started
             inference_count += 1
             total_inference_seconds += inference_seconds
@@ -307,6 +396,21 @@ def run(config: dict[str, Any]) -> None:
                 raw_detections,
                 detected,
             )
+
+            if (
+                save_annotated_frames
+                and inference_count % annotated_frame_interval == 0
+            ):
+                save_annotated_frame(
+                    frame,
+                    boxes,
+                    classes,
+                    scores,
+                    annotated_frame_threshold,
+                    annotated_directory,
+                    max_annotated_frames,
+                    inference_count,
+                )
 
             for object_name in objects:
                 if object_name in detected:
