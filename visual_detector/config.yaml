@@ -15,7 +15,7 @@ options:
     camera_width: 640
     camera_height: 480
     detection_interval_seconds: 2
-    confidence_threshold: 0.65
+    confidence_threshold: 0.35
     confirm_frames: 2
     clear_frames: 5
     server_url: ""
