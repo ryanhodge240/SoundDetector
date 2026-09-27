@@ -1,7 +1,7 @@
 name: Visual Detector
-version: "0.1.1"
+version: "0.1.2"
 slug: visual_detector
-description: Detect people and vehicles from a USB webcam and optionally send state changes over Tailscale.
+description: Detect people from a USB webcam and optionally send state changes over Tailscale.
 arch:
     - aarch64
 startup: application

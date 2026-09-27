@@ -22,7 +22,6 @@ MODEL_URL = (
 )
 MODEL_FILENAME = "ssd_mobilenet_v1.tflite"
 PERSON_CLASS = 1
-VEHICLE_CLASSES = {3, 4, 6, 8}  # car, motorcycle, bus, truck
 
 
 def read_config(path: str) -> dict[str, Any]:
@@ -110,29 +109,43 @@ def tensor_input(interpreter: Interpreter, frame: np.ndarray) -> None:
 def detection_outputs(
     interpreter: Interpreter,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple[int, float]]]:
-    vectors: list[np.ndarray] = []
+    vectors: list[tuple[dict[str, Any], np.ndarray]] = []
     boxes: np.ndarray | None = None
     for details in interpreter.get_output_details():
         values = np.squeeze(dequantize(interpreter.get_tensor(details["index"]), details))
         if values.ndim == 2 and values.shape[-1] == 4:
             boxes = values
         elif values.size > 1:
-            vectors.append(values.reshape(-1))
+            vectors.append((details, values.reshape(-1)))
 
     if boxes is None or len(vectors) < 2:
         raise RuntimeError("Object detection model outputs are not in SSD format")
 
     # Standard SSD exports contain scores, class IDs, and a scalar count.
-    # Ignore the scalar count and identify scores by their [0, 1] range.
-    vectors = [vector for vector in vectors if len(vector) > 1]
-    score_candidates = [
-        vector for vector in vectors
-        if float(np.min(vector)) >= -0.01 and float(np.max(vector)) <= 1.01
+    # Prefer semantic tensor names, then use value ranges as a fallback.
+    named_scores = [
+        (details, vector) for details, vector in vectors
+        if any(word in details.get("name", "").lower() for word in ("score", "confidence"))
     ]
+    named_classes = [
+        (details, vector) for details, vector in vectors
+        if any(word in details.get("name", "").lower() for word in ("class", "category"))
+    ]
+    score_candidates = [vector for _, vector in named_scores]
+    class_candidates = [vector for _, vector in named_classes]
+    # Ignore a scalar count and identify scores by their [0, 1] range.
+    vectors = [(details, vector) for details, vector in vectors if len(vector) > 1]
+    score_candidates = [
+        vector for _, vector in vectors
+        if float(np.min(vector)) >= -0.01 and float(np.max(vector)) <= 1.01
+    ] or score_candidates
     if not score_candidates:
         raise RuntimeError("Could not identify score output from object model")
     scores = max(score_candidates, key=len)
-    class_candidates = [vector for vector in vectors if vector is not scores]
+    if not class_candidates:
+        class_candidates = [vector for _, vector in vectors if vector is not scores]
+    if not class_candidates:
+        raise RuntimeError("Could not identify class output from object model")
     classes = min(class_candidates, key=lambda vector: float(np.mean(np.abs(vector - np.round(vector)))))
     count = min(len(boxes), len(classes), len(scores))
     raw_detections = sorted(
@@ -161,8 +174,6 @@ def detect(
         class_id = int(round(float(class_id)))
         if class_id == PERSON_CLASS:
             detected["person"] = max(detected.get("person", 0.0), float(score))
-        elif class_id in VEHICLE_CLASSES:
-            detected["vehicle"] = max(detected.get("vehicle", 0.0), float(score))
     return detected, raw_detections
 
 
@@ -241,7 +252,7 @@ def run(config: dict[str, Any]) -> None:
         int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT)),
     )
 
-    objects = ("person", "vehicle")
+    objects = ("person",)
     present = {object_name: False for object_name in objects}
     positive_counts = {object_name: 0 for object_name in objects}
     negative_counts = {object_name: 0 for object_name in objects}
@@ -314,17 +325,17 @@ def run(config: dict[str, Any]) -> None:
 
             if inference_count == 1 or inference_count % 30 == 0:
                 logging.info(
-                    "Detection summary: frames=%s average_inference_ms=%.1f person=%s vehicle=%s",
+                    "Detection summary: frames=%s average_inference_ms=%.1f person=%s",
                     inference_count,
                     total_inference_seconds / inference_count * 1000,
-                    present["person"], present["vehicle"],
+                    present["person"],
                 )
     finally:
         camera.release()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Detect people and vehicles from a webcam.")
+    parser = argparse.ArgumentParser(description="Detect people from a webcam.")
     parser.add_argument("--config", default=os.environ.get("VISUAL_DETECTOR_CONFIG", "/data/options.json"))
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

@@ -61,7 +61,7 @@ input overflow warnings.
 ## Visual Detector app
 
 The **Visual Detector** app uses a USB webcam and a lightweight TensorFlow Lite
-object-detection model. It detects people and vehicles locally without storing
+object-detection model. It detects people locally without storing
 or uploading camera images. It processes one frame every two seconds by default
 and requires repeated detections before reporting a state change.
 
@@ -81,7 +81,7 @@ Configuration options include:
 - `save_debug_frame`: optionally save the first captured frame as
   `/data/debug_frame.jpg` for camera troubleshooting.
 
-The app reports an initial `cleared` state for both object types, then reports
+The app reports an initial `cleared` state for the person detector, then reports
 only subsequent state changes. Example event:
 
 ```json
