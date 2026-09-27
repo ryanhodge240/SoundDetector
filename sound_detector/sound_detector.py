@@ -29,9 +29,14 @@ TARGET_LABELS = {
     'baby cry, infant cry': 'baby_crying',
     'crying, sobbing': 'baby_crying',
     'doorbell': 'doorbell',
+    'ding-dong': 'doorbell',
     'knock': 'door_knock',
     'fire alarm': 'fire_alarm',
     'smoke detector, smoke alarm': 'fire_alarm',
+    'bark': 'dog_barking',
+    'dog': 'dog_barking',
+    'telephone bell ringing': 'phone_ringing',
+    'ringtone': 'phone_ringing',
 }
 
 
