@@ -54,3 +54,23 @@ repository because it is much larger than the app source.
 The detector analyzes overlapping windows. At `debug` level, logs include the
 RMS level, model scores for the target sounds, inference duration, and audio
 input overflow warnings.
+
+## Limit Switch app
+
+This repository also contains a **Limit Switch Detector** app for a normally-open
+switch connected between Raspberry Pi **BCM GPIO17** (physical pin 11) and GND.
+The app enables the GPIO's internal pull-up, so an open switch reports state `0`
+and a pressed switch reports state `1`. It reports the initial state at startup
+and then reports only state changes, with configurable debounce filtering.
+
+The limit-switch app uses the same `server_url`, `server_token`, and `dry_run`
+settings as the sound detector. Its event payload has this form:
+
+```json
+{
+  "event": "limit_switch",
+  "state": 1,
+  "gpio": 17,
+  "timestamp": 1720000000000
+}
+```

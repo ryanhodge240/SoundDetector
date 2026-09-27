@@ -139,7 +139,7 @@ def run(config: dict[str, Any]) -> None:
         interpreter.resize_tensor_input(input_details['index'], [WINDOW_SAMPLES])
     interpreter.allocate_tensors()
 
-    threshold = float(config.get('confidence_threshold', 0.65))
+    threshold = float(config.get('confidence_threshold', 0.35))
     cooldown_seconds = int(config.get('cooldown_seconds', 10))
     server_url = str(config.get('server_url') or '').strip()
     server_token = str(config.get('server_token') or '').strip()

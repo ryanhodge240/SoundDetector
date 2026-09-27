@@ -1,5 +1,5 @@
 name: Sound Detector
-version: "0.1.6"
+version: "0.1.7"
 slug: sound_detector
 description: Detect common household sounds and optionally send events over Tailscale.
 arch:
@@ -14,11 +14,11 @@ devices:
 options:
     server_url: ""
     server_token: ""
-    confidence_threshold: 0.65
+    confidence_threshold: 0.35
     cooldown_seconds: 10
     dry_run: true
     audio_input_device: ""
-    log_level: debug
+    log_level: info
 schema:
     server_url: str?
     server_token: password?

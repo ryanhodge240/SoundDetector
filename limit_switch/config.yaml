@@ -1,0 +1,26 @@
+name: Limit Switch Detector
+version: "0.1.1"
+slug: limit_switch
+description: Monitor a normally-open limit switch on Raspberry Pi GPIO and optionally send state changes over Tailscale.
+arch:
+    - aarch64
+startup: application
+boot: auto
+init: false
+gpio: true
+options:
+    gpio_chip: /dev/gpiochip0
+    gpio_line: 17
+    debounce_ms: 50
+    server_url: ""
+    server_token: ""
+    dry_run: true
+    log_level: info
+schema:
+    gpio_chip: str
+    gpio_line: int(0,)
+    debounce_ms: int(0,)
+    server_url: str?
+    server_token: password?
+    dry_run: bool
+    log_level: list(debug|info|warning|error)
