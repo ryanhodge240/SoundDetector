@@ -26,12 +26,12 @@ MODEL_FILENAME = 'yamnet.tflite'
 LABELS_FILENAME = 'yamnet_labels.csv'
 
 TARGET_LABELS = {
-    'baby cry, infant cry': 'baby_cry',
-    'crying, sobbing': 'baby_cry',
+    'baby cry, infant cry': 'baby_crying',
+    'crying, sobbing': 'baby_crying',
     'doorbell': 'doorbell',
-    'knock': 'knock',
+    'knock': 'door_knock',
     'fire alarm': 'fire_alarm',
-    'smoke detector, smoke alarm': 'smoke_detector',
+    'smoke detector, smoke alarm': 'fire_alarm',
 }
 
 
@@ -80,8 +80,12 @@ def event_payload(event_name: str, confidence: float) -> dict[str, Any]:
 
 
 def send_event(server_url: str, server_token: str, payload: dict[str, Any]) -> None:
+    endpoint = server_url.rstrip('/')
+    if endpoint.endswith('/api/triggers'):
+        endpoint = f'{endpoint}/{payload["event"]}'
+
     request = urllib.request.Request(
-        server_url,
+        endpoint,
         data=json.dumps(payload).encode('utf-8'),
         headers={
             'Content-Type': 'application/json',

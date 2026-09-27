@@ -1,5 +1,5 @@
 name: Sound Detector
-version: "0.1.7"
+version: "0.1.8"
 slug: sound_detector
 description: Detect common household sounds and optionally send events over Tailscale.
 arch:
