@@ -30,6 +30,8 @@ The app currently supports `aarch64`, which is the architecture used by a
 - `server_token`: Optional bearer token sent to `server_url`. Set this to the
   OwlHacks `TRIGGER_API_KEY`.
 - `confidence_threshold`: Minimum model confidence, from `0` to `1`.
+- `rms_threshold`: Minimum audio RMS level required before model inference. Set
+  to `0` to disable the audio-level gate.
 - `cooldown_seconds`: Minimum time between events of the same type.
 - `dry_run`: Log detections without sending them, even if `server_url` is set.
 - `audio_input_device`: Optional PortAudio device name or index. Leave empty to

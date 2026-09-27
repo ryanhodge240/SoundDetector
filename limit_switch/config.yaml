@@ -1,5 +1,5 @@
 name: Limit Switch Detector
-version: "0.1.1"
+version: "0.1.2"
 slug: limit_switch
 description: Monitor a normally-open limit switch on Raspberry Pi GPIO and optionally send state changes over Tailscale.
 arch:

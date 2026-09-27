@@ -150,6 +150,7 @@ def run(config: dict[str, Any]) -> None:
     interpreter.allocate_tensors()
 
     threshold = float(config.get('confidence_threshold', 0.35))
+    rms_threshold = float(config.get('rms_threshold', 0.001))
     cooldown_seconds = int(config.get('cooldown_seconds', 10))
     server_url = str(config.get('server_url') or '').strip()
     server_token = str(config.get('server_token') or '').strip()
@@ -161,12 +162,13 @@ def run(config: dict[str, Any]) -> None:
     last_events: dict[str, float] = {}
 
     logging.info(
-        'Configuration: sample_rate=%s window_ms=%.0f hop_ms=%.0f threshold=%.2f cooldown_seconds=%s '
+        'Configuration: sample_rate=%s window_ms=%.0f hop_ms=%.0f threshold=%.2f rms_threshold=%.5f cooldown_seconds=%s '
         'dry_run=%s server_configured=%s',
         SAMPLE_RATE,
         WINDOW_SAMPLES / SAMPLE_RATE * 1000,
         HOP_SAMPLES / SAMPLE_RATE * 1000,
         threshold,
+        rms_threshold,
         cooldown_seconds,
         dry_run,
         bool(server_url),
@@ -206,7 +208,7 @@ def run(config: dict[str, Any]) -> None:
                 audio_buffer = audio_buffer[HOP_SAMPLES:]
                 window_count += 1
                 rms = math.sqrt(float(np.mean(np.square(samples))))
-                if rms < 0.001:
+                if rms < rms_threshold:
                     logging.debug('Window %s skipped: rms=%.5f below gate', window_count, rms)
                     continue
 
