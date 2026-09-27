@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 ARG BUILD_VERSION
 
+ENV SOUND_DETECTOR_VERSION="${BUILD_VERSION}"
+
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.type="app" \

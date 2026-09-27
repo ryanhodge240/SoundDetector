@@ -145,6 +145,7 @@ def run(config: dict[str, Any]) -> None:
     server_token = str(config.get('server_token') or '').strip()
     dry_run = bool(config.get('dry_run', True))
     device = normalize_device(config.get('audio_input_device'))
+    version = os.environ.get('SOUND_DETECTOR_VERSION') or 'unknown'
     log_level = str(config.get('log_level') or 'info').upper()
     logging.getLogger().setLevel(getattr(logging, log_level, logging.INFO))
     last_events: dict[str, float] = {}
@@ -177,6 +178,13 @@ def run(config: dict[str, Any]) -> None:
         blocksize=HOP_SAMPLES,
         device=device,
     ) as stream:
+        stream_device = stream.device
+        if isinstance(stream_device, (tuple, list)):
+            stream_device = stream_device[0]
+        stream_device_info = sd.query_devices(stream_device)
+        logging.info('Sound Detector version=%s', version)
+        logging.info('Using audio input device %s: %s', stream_device, stream_device_info['name'])
+
         while True:
             audio, status = stream.read(HOP_SAMPLES)
             if status:
