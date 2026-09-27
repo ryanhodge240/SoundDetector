@@ -196,7 +196,7 @@ def run(config: dict[str, Any]) -> None:
                 audio_buffer = audio_buffer[HOP_SAMPLES:]
                 window_count += 1
                 rms = math.sqrt(float(np.mean(np.square(samples))))
-                if rms < 0.005:
+                if rms < 0.001:
                     logging.debug('Window %s skipped: rms=%.5f below gate', window_count, rms)
                     continue
 
