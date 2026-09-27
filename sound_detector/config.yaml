@@ -1,5 +1,5 @@
 name: Sound Detector
-version: "0.1.3"
+version: "0.1.4"
 slug: sound_detector
 description: Detect common household sounds and optionally send events over Tailscale.
 arch:
@@ -18,7 +18,7 @@ options:
     cooldown_seconds: 10
     dry_run: true
     audio_input_device: ""
-    log_level: info
+    log_level: debug
 schema:
     server_url: str?
     server_token: password?
