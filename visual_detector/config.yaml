@@ -1,5 +1,5 @@
 name: Visual Detector
-version: "0.1.3"
+version: "0.1.4"
 slug: visual_detector
 description: Detect people from a USB webcam and optionally send state changes over Tailscale.
 arch:
