@@ -12,8 +12,6 @@ The app sends event metadata only. It does not upload or store raw audio.
 - `doorbell`
 - `door_knock`
 - `fire_alarm`
-- `dog_barking`
-- `phone_ringing`
 - Smoke detector sounds are sent as `fire_alarm`.
 
 ## Install
@@ -59,3 +57,37 @@ repository because it is much larger than the app source.
 The detector analyzes overlapping windows. At `debug` level, logs include the
 RMS level, model scores for the target sounds, inference duration, and audio
 input overflow warnings.
+
+## Visual Detector app
+
+The **Visual Detector** app uses a USB webcam and a lightweight TensorFlow Lite
+object-detection model. It detects people and vehicles locally without storing
+or uploading camera images. It processes one frame every two seconds by default
+and requires repeated detections before reporting a state change.
+
+The default camera is `/dev/video0`. The camera should be fixed in position and
+have a clear, reasonably lit view of the area being monitored. A Raspberry Pi 4
+or newer is recommended. The app uses the same `server_url`, `server_token`,
+and `dry_run` settings as the other apps.
+
+Configuration options include:
+
+- `camera_device`: USB camera device, normally `/dev/video0`.
+- `camera_width` and `camera_height`: requested capture resolution.
+- `detection_interval_seconds`: delay between inferences.
+- `confidence_threshold`: minimum model confidence.
+- `confirm_frames`: detections required before reporting arrival.
+- `clear_frames`: missed detections required before reporting departure.
+
+The app reports an initial `cleared` state for both object types, then reports
+only subsequent state changes. Example event:
+
+```json
+{
+  "event": "visual_detection",
+  "object": "person",
+  "state": "detected",
+  "confidence": 0.87,
+  "timestamp": 1720000000000
+}
+```
