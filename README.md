@@ -12,6 +12,8 @@ The app sends event metadata only. It does not upload or store raw audio.
 - `doorbell`
 - `door_knock`
 - `fire_alarm`
+- `dog_barking`
+- `phone_ringing`
 - Smoke detector sounds are sent as `fire_alarm`.
 
 ## Install
